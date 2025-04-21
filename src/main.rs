@@ -101,9 +101,18 @@ mod cc {
                         } else if parse_str {
                             temp.push(c);
                         } else {
-                            let token = Token { contents: temp.clone(), token_type: TokenType::IntLit };
-                            tokens.push(token);
-                            temp.clear();
+                            match temp.parse::<i32>() {
+                                Ok(_) => {
+                                    let token = Token { contents: temp.clone(), token_type: TokenType::IntLit };
+                                    tokens.push(token);
+                                    temp.clear();
+                                }
+                                Err(_) => {
+                                    let token = Token { contents: temp.clone(), token_type: TokenType::VarName };
+                                    tokens.push(token);
+                                    temp.clear();
+                                }
+                            }
                         }
                     }
                 }
@@ -156,6 +165,11 @@ mod cc {
     }
 
     pub fn compile(tokens: Vec<Token>) {
+        struct StackVar {
+            pub name: String,
+            pub offset: usize,
+        }
+
         let mut label_count: usize = 0;
 
         let mut asm = String::new();
@@ -166,9 +180,11 @@ mod cc {
 
         let mut loop_control: usize = 0;
 
+        let mut stack_vars: Vec<StackVar> = Vec::new();
+
         for (index, token) in tokens.iter().enumerate() {
             match token.token_type {
-                TokenType::Main => code.push_str("entry _start\n_start:\n"), 
+                TokenType::Main => code.push_str("entry _start\n_start:\npush ebp\nmov ebp,esp\n"), 
                 TokenType::Return => {
                     if index == tokens.len()-1 {
                         log_error("No value after return!");
@@ -286,18 +302,38 @@ mod cc {
                                     data.push_str(&name);
                                     data.push_str("_len equ ");
                                     data.push_str(&name);
-                                    data.push_str("_end");
-                                    data.push_str("-");
+                                    data.push_str("_end-");
                                     data.push_str(&name);
                                     data.push_str("\n");
                                 }
                                 TokenType::IntLit => {
+                                    code.push_str("push ");
+                                    code.push_str(&value_token.contents);
+                                    code.push_str("\n");
+
+                                    let var = StackVar { name: name_token.contents.clone(), offset: 0 };
+                                    stack_vars.push(var);
+                                    for stack_var in &mut stack_vars {
+                                        stack_var.offset += 4;
+                                    }
                                 }
                                 _ => { }
                             }
                         }
                         _ => { } 
                     }
+                }
+                TokenType::VarName => {
+                    let mut offset = 0;
+                    for stack_var in &stack_vars {
+                        if stack_var.name == token.contents {
+                            offset = stack_var.offset;
+                            break;
+                        }
+                    }
+                    code.push_str("mov ecx,[ebp-");
+                    code.push_str(&offset.to_string());
+                    code.push_str("]\n");
                 }
                 _ => { }
             }
