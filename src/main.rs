@@ -14,4 +14,11 @@ pub fn main() {
         cc::log_error("Unknown file extension! Expected '.cc' extension!");
         std::process::exit(1);
     }
+
+    let contents: String = match std::fs::read_to_string(file_path) {
+        Ok(x) => x,
+        Err(_) => String::new() 
+    };
+
+    cc::compile(&contents);
 }
