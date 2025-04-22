@@ -1,0 +1,16 @@
+main {
+  var test = "test";
+  print "test", "test again", test;
+
+  if test equals "test" {
+    print test;
+
+    if ("test" equals test and condition) or test equals "test" {
+      print "nested if!";
+    }
+  }
+
+  if condition {
+    print "another if";
+  }
+}

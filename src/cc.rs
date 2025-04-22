@@ -1,44 +1,58 @@
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Null,
     StrLit(String),
     IntLit(i32),
     UIntLit(u32),
     BigIntLit(i64),
     UBigIntLit(u64),
-    FltLit(f32),
-    BigFltLit(f64),
+    FloatLit(f32),
+    BigFloatLit(f64),
+    Ref(String),
     Semicolen,
     OpenScope,
     CloseScope,
-    OpenArea,
-    CloseArea,
+    OpenExpr,
+    CloseExpr,
     Comma,
+    Assign,
+    Equals,
     Main,
     Print,
     Func,
+    Var,
+    If,
+    Res,
+    And,
+    Or,
 }
 
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::Null => write!(f, ""),
             Token::StrLit(s) => write!(f, "\"{}\"", s),
             Token::IntLit(n) => write!(f, "{}", n),
             Token::UIntLit(n) => write!(f, "{}", n),
             Token::BigIntLit(n) => write!(f, "{}", n),
             Token::UBigIntLit(n) => write!(f, "{}", n),
-            Token::FltLit(n) => write!(f, "{}", n),
-            Token::BigFltLit(n) => write!(f, "{}", n),
+            Token::FloatLit(n) => write!(f, "{}", n),
+            Token::BigFloatLit(n) => write!(f, "{}", n),
+            Token::Ref(s) => write!(f, "{}", s),
             Token::Semicolen => write!(f, ";"),
             Token::OpenScope => write!(f, "{{"),
             Token::CloseScope => write!(f, "}}"),
-            Token::OpenArea => write!(f, "("),
-            Token::CloseArea => write!(f, ")"),
+            Token::OpenExpr => write!(f, "open"),
+            Token::CloseExpr => write!(f, "close"),
+            Token::Assign => write!(f, "="),
+            Token::Equals => write!(f, "equals"),
             Token::Comma => write!(f, ","),
             Token::Main => write!(f, "main"),
             Token::Print => write!(f, "print"),
             Token::Func => write!(f, "func"),
+            Token::Var => write!(f, "var"),
+            Token::If => write!(f, "if"),
+            Token::Res => write!(f, "res"),
+            Token::And => write!(f, "and"),
+            Token::Or => write!(f, "or"),
         }
     }
 }
@@ -58,7 +72,7 @@ pub fn check_extension(file_path: &str) -> bool {
         None => return false 
     };
 
-    if &file_path[index..file_path.len()] == ".cc" {
+    if &file_path[index..file_path.len()] == ".crip" {
         return true;   
     }
 
@@ -70,7 +84,12 @@ fn process_stmt(stmt: &str) -> Token {
         "print" => return Token::Print,
         "func" => return Token::Func,
         "main" => return Token::Main,
-        _ => return Token::Null,
+        "var" => return Token::Var,
+        "if" => return Token::If,
+        "equals" => return Token::Equals,
+        "and" => return Token::And,
+        "or" => return Token::Or,
+        _ => return Token::Ref(stmt.trim().to_string()),
     }
 }
 
@@ -87,28 +106,35 @@ fn tokenize(file_contents: &str) -> Vec<Token> {
                     continue;
                 }
 
-                let token = process_stmt(&temp);
-                if let Token::Null = token {
+                if temp.is_empty() {
                     continue;
                 }
+
+                let token = process_stmt(&temp);
                 tokens.push(token);
                 temp.clear();
             }
             ';' => {
-                let token = process_stmt(&temp);
-                if let Token::Null = token {
+                if temp.is_empty() {
                     tokens.push(Token::Semicolen);
                     continue;
                 }
+                let token = process_stmt(&temp);
                 tokens.push(token);
                 tokens.push(Token::Semicolen);
                 temp.clear();
             }
             '{' => tokens.push(Token::OpenScope),
             '}' => tokens.push(Token::CloseScope),
-            '(' => tokens.push(Token::OpenArea),
-            ')' => tokens.push(Token::CloseArea),
+            '(' => tokens.push(Token::OpenExpr),
+            ')' => {
+                let token = process_stmt(&temp);
+                tokens.push(token);
+                tokens.push(Token::CloseExpr);
+                temp.clear();
+            }
             ',' => tokens.push(Token::Comma),
+            '=' => tokens.push(Token::Assign),
             '"' => {
                 if parse_str {
                     tokens.push(Token::StrLit(temp.clone()));
@@ -176,19 +202,96 @@ fn parse_print(tokens: &[Token], i: &mut usize) -> ASTNode {
     }
 }
 
+fn parse_var(tokens: &[Token], i: &mut usize) -> ASTNode {
+    *i += 1;
+    let mut children = Vec::new();
+
+    while *i < tokens.len() {
+        match &tokens[*i] {
+            Token::Semicolen => {
+                *i += 1;
+                break;
+            }
+            token => {
+                children.push(ASTNode {
+                    token: token.clone(),
+                    children: Vec::new(),
+                });
+                *i += 1;
+            }
+        }
+    }
+
+    return ASTNode {
+        token: Token::Var,
+        children,
+    }
+}
+
+fn parse_if(tokens: &[Token], i: &mut usize) -> ASTNode {
+    *i += 1;
+    let mut children = Vec::new();
+
+    while *i < tokens.len() {
+        match &tokens[*i] {
+            Token::Semicolen => {
+                *i += 1;
+                break;
+            }
+            Token::CloseScope => {
+                *i += 1;
+                break;
+            }
+            Token::OpenExpr => {
+                *i += 1;
+                let if_expr = parse_ast(tokens, i);
+                children.push(ASTNode {
+                    token: Token::OpenExpr,
+                    children: if_expr,
+                });
+            }
+            Token::OpenScope => {
+                *i += 1;
+                let if_scope = parse_ast(tokens, i);
+                children.push(ASTNode {
+                    token: Token::Res,
+                    children: if_scope,
+                });
+            }
+            token => {
+                children.push(ASTNode {
+                    token: token.clone(),
+                    children: Vec::new(),
+                });
+                *i += 1;
+            }
+        }
+    }
+
+    return ASTNode {
+        token: Token::If,
+        children,
+    }
+}
+
 fn parse_ast(tokens: &[Token], i: &mut usize) -> Vec<ASTNode> {
     let mut ast = Vec::new();
 
     while *i < tokens.len() {
         match &tokens[*i] {
-            Token::Main => {
-                ast.push(parse_main(tokens, i));
-            }
-            Token::Print => {
-                ast.push(parse_print(tokens, i));
-            }
+            Token::Main => ast.push(parse_main(tokens, i)),
+            Token::Print => ast.push(parse_print(tokens, i)),
+            Token::Var => ast.push(parse_var(tokens, i)),
+            Token::If => ast.push(parse_if(tokens, i)),
             Token::CloseScope => break,
-            _ => *i += 1,
+            Token::CloseExpr => break,
+            _ => {
+                ast.push(ASTNode {
+                    token: tokens[*i].clone(),
+                    children: Vec::new(),
+                });
+                *i += 1;
+            }
         }
     }
 
@@ -212,7 +315,9 @@ fn print_ast(ast: &[ASTNode], depth: usize) {
 
 pub fn compile(contents: &str) {
     let tokens: Vec<Token> = tokenize(contents);
+    for token in &tokens {
+        println!("{}", token); 
+    }
     let ast: Vec<ASTNode> = create_ast(tokens);
-
     print_ast(&ast, 0);
 }
