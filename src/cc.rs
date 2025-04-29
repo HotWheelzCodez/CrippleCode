@@ -15,7 +15,7 @@ enum Token {
     CloseExpr,
     Comma,
     Assign,
-    Equals,
+    Comp,
     Main,
     Print,
     Func,
@@ -24,6 +24,7 @@ enum Token {
     Res,
     And,
     Or,
+    For,
 }
 
 impl std::fmt::Display for Token {
@@ -43,7 +44,7 @@ impl std::fmt::Display for Token {
             Token::OpenExpr => write!(f, "open"),
             Token::CloseExpr => write!(f, "close"),
             Token::Assign => write!(f, "="),
-            Token::Equals => write!(f, "equals"),
+            Token::Comp => write!(f, "=="),
             Token::Comma => write!(f, ","),
             Token::Main => write!(f, "main"),
             Token::Print => write!(f, "print"),
@@ -53,6 +54,7 @@ impl std::fmt::Display for Token {
             Token::Res => write!(f, "res"),
             Token::And => write!(f, "and"),
             Token::Or => write!(f, "or"),
+            Token::For => write!(f, "for"),
         }
     }
 }
@@ -86,9 +88,10 @@ fn process_stmt(stmt: &str) -> Token {
         "main" => return Token::Main,
         "var" => return Token::Var,
         "if" => return Token::If,
-        "equals" => return Token::Equals,
+        "equals" => return Token::Comp,
         "and" => return Token::And,
         "or" => return Token::Or,
+        "for" => return Token::For,
         _ => return Token::Ref(stmt.trim().to_string()),
     }
 }
@@ -98,58 +101,67 @@ fn tokenize(file_contents: &str) -> Vec<Token> {
     let mut parse_str = false;
 
     let mut temp = String::new();
-    for c in file_contents.chars() {
+    let mut chars = file_contents.chars().peekable();
+
+    while let Some(c) = chars.next() {
         match c {
             ' ' => {
                 if parse_str {
                     temp.push(c);
-                    continue;
+                } else if !temp.is_empty() {
+                    tokens.push(process_stmt(&temp));
+                    temp.clear();
                 }
-
-                if temp.is_empty() {
-                    continue;
-                }
-
-                let token = process_stmt(&temp);
-                tokens.push(token);
-                temp.clear();
             }
             ';' => {
-                if temp.is_empty() {
-                    tokens.push(Token::Semicolen);
-                    continue;
+                if !temp.is_empty() {
+                    tokens.push(process_stmt(&temp));
+                    temp.clear();
                 }
-                let token = process_stmt(&temp);
-                tokens.push(token);
                 tokens.push(Token::Semicolen);
-                temp.clear();
             }
             '{' => tokens.push(Token::OpenScope),
             '}' => tokens.push(Token::CloseScope),
-            '(' => tokens.push(Token::OpenExpr),
+            '(' => {
+                if !temp.is_empty() {
+                    tokens.push(process_stmt(&temp));
+                    temp.clear();
+                }
+                tokens.push(Token::OpenExpr);
+            }
             ')' => {
-                let token = process_stmt(&temp);
-                tokens.push(token);
+                if !temp.is_empty() {
+                    tokens.push(process_stmt(&temp));
+                    temp.clear();
+                }
                 tokens.push(Token::CloseExpr);
-                temp.clear();
             }
             ',' => tokens.push(Token::Comma),
-            '=' => tokens.push(Token::Assign),
+            '=' => {
+                if let Some('=') = chars.peek() {
+                    chars.next(); // consume the '='
+                    tokens.push(Token::Comp);
+                } else {
+                    tokens.push(Token::Assign);
+                }
+            }
             '"' => {
                 if parse_str {
                     tokens.push(Token::StrLit(temp.clone()));
                     temp.clear();
                 }
                 parse_str = !parse_str;
-            } 
+            }
             _ => {
-                if parse_str {
-                    temp.push(c);
-                } else if !c.is_whitespace() {
+                if parse_str || !c.is_whitespace() {
                     temp.push(c);
                 }
             }
         }
+    }
+
+    if !temp.is_empty() {
+        tokens.push(process_stmt(&temp));
     }
 
     return tokens;
@@ -274,6 +286,53 @@ fn parse_if(tokens: &[Token], i: &mut usize) -> ASTNode {
     }
 }
 
+fn parse_func(tokens: &[Token], i: &mut usize) -> ASTNode {
+    *i += 1;
+    let mut children = Vec::new();
+
+    while *i < tokens.len() {
+        match &tokens[*i] {
+            Token::Semicolen => {
+                *i += 1;
+                break;
+            }
+            Token::CloseScope => {
+                *i += 1;
+                break;
+            }
+            Token::OpenExpr => {
+                *i += 1;
+                let if_expr = parse_ast(tokens, i);
+                children.push(ASTNode {
+                    token: Token::OpenExpr,
+                    children: if_expr,
+                });
+            }
+            Token::OpenScope => {
+                *i += 1;
+                let if_scope = parse_ast(tokens, i);
+                children.push(ASTNode {
+                    token: Token::Res,
+                    children: if_scope,
+                });
+            }
+            token => {
+                children.push(ASTNode {
+                    token: token.clone(),
+                    children: Vec::new(),
+                });
+                *i += 1;
+            }
+        }
+    }
+
+    return ASTNode {
+        token: Token::Func,
+        children,
+    }
+
+}
+
 fn parse_ast(tokens: &[Token], i: &mut usize) -> Vec<ASTNode> {
     let mut ast = Vec::new();
 
@@ -283,6 +342,8 @@ fn parse_ast(tokens: &[Token], i: &mut usize) -> Vec<ASTNode> {
             Token::Print => ast.push(parse_print(tokens, i)),
             Token::Var => ast.push(parse_var(tokens, i)),
             Token::If => ast.push(parse_if(tokens, i)),
+            Token::Func => ast.push(parse_func(tokens, i)),
+            Token::For => ast.push(parse_main(tokens, i)),
             Token::CloseScope => break,
             Token::CloseExpr => break,
             _ => {
@@ -315,9 +376,9 @@ fn print_ast(ast: &[ASTNode], depth: usize) {
 
 pub fn compile(contents: &str) {
     let tokens: Vec<Token> = tokenize(contents);
-    for token in &tokens {
-        println!("{}", token); 
-    }
+    // for token in &tokens {
+    //     println!("{}", token); 
+    // }
     let ast: Vec<ASTNode> = create_ast(tokens);
     print_ast(&ast, 0);
 }

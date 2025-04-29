@@ -1,11 +1,15 @@
+func test() {
+  print "test in func";
+}
+
 main {
   var test = "test";
   print "test", "test again", test;
 
-  if test equals "test" {
+  if test == "test" {
     print test;
 
-    if ("test" equals test and condition) or test equals "test" {
+    if ("test" == test and condition) or test == "test" {
       print "nested if!";
     }
   }
