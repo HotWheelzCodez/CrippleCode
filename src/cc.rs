@@ -252,6 +252,10 @@ fn parse_if(tokens: &[Token], i: &mut usize) -> ASTNode {
             }
             Token::CloseScope => {
                 *i += 1;
+                children.push(ASTNode {
+                    token: Token::CloseExpr,
+                    children: Vec::new(),
+                });
                 break;
             }
             Token::OpenExpr => {
@@ -344,8 +348,22 @@ fn parse_ast(tokens: &[Token], i: &mut usize) -> Vec<ASTNode> {
             Token::If => ast.push(parse_if(tokens, i)),
             Token::Func => ast.push(parse_func(tokens, i)),
             Token::For => ast.push(parse_main(tokens, i)),
+            Token::OpenExpr => {
+                *i += 1;
+                ast.push(ASTNode {
+                    token: Token::OpenExpr,
+                    children: parse_ast(tokens, i),
+                });
+                ast.push(ASTNode {
+                    token: Token::CloseExpr,
+                    children: Vec::new(),
+                });
+            }
             Token::CloseScope => break,
-            Token::CloseExpr => break,
+            Token::CloseExpr => {
+                *i += 1;
+                break;
+            }
             _ => {
                 ast.push(ASTNode {
                     token: tokens[*i].clone(),

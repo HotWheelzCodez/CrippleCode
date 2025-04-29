@@ -1,20 +1,10 @@
-func test() {
-  print "test in func";
+func log(msg) {
+  print "MESSAGE: ", msg;
 }
 
 main {
-  var test = "test";
-  print "test", "test again", test;
-
-  if test == "test" {
-    print test;
-
-    if ("test" == test and condition) or test == "test" {
-      print "nested if!";
-    }
-  }
-
-  if condition {
-    print "another if";
+  var x = 5;
+  if x == 5 {
+    log("x is 5");
   }
 }
